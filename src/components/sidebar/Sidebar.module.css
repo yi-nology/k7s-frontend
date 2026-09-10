@@ -355,3 +355,28 @@
 .railLabel {
   white-space: nowrap;
 }
+
+/* Imported-context rows carry a remove affordance: select button plus a
+   small "×" (web shell only — file contexts aren't removable). */
+.menuRowWrap {
+  display: flex;
+  align-items: center;
+}
+.menuRowWrap .menuRow {
+  flex: 1;
+  min-width: 0;
+}
+.menuRemove {
+  border: none;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: var(--text-md);
+  line-height: 1;
+  padding: 4px 8px;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+.menuRemove:hover {
+  color: var(--status-err);
+  background: var(--bg-hover);
+}

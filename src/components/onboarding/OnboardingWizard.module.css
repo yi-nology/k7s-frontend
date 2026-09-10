@@ -187,3 +187,64 @@
 .nsInput:focus {
   border-color: var(--border-hover);
 }
+
+/* Paste mode (web shell): raw YAML textarea + parse/validate preview. */
+.secondary {
+  background: transparent;
+  border: 1px solid var(--border-menu);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: var(--text-md);
+  padding: 8px 16px;
+  margin-left: 8px;
+}
+.pasteArea {
+  display: block;
+  width: 100%;
+  margin-top: 12px;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  background: var(--bg-hover);
+  border: 1px solid var(--border-menu);
+  border-radius: var(--radius-sm);
+  resize: vertical;
+}
+.previewBox {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-menu);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.previewOk {
+  margin: 0;
+  color: var(--status-ok);
+  font-weight: 600;
+}
+.previewBad {
+  margin: 0;
+  color: var(--status-err);
+}
+.previewGrid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 6px 12px;
+  align-items: start;
+}
+.previewLabel {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.previewValues {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}

@@ -34,6 +34,9 @@ export interface ContextInfo {
   cluster: string;
   /** True for the kubeconfig's current-context. */
   current: boolean;
+  /** True for contexts registered via the web shell's paste/import — only
+   *  those can be removed at runtime. Absent for kubeconfig-file contexts. */
+  imported?: boolean;
 }
 
 /** One problem the back-end found while parsing/validating an imported
@@ -45,6 +48,19 @@ export interface KubeconfigIssue {
   message: string;
   /** The context the issue belongs to; absent for file-level problems. */
   context?: string;
+}
+
+/**
+ * Result of `validateKubeconfigContent` — the parsed entities plus every
+ * issue, WITHOUT importing. Check `valid` (and render `issues`) before
+ * offering the import action.
+ */
+export interface KubeconfigPreview {
+  valid: boolean;
+  issues: KubeconfigIssue[];
+  clusters: Array<{ name: string; server: string }>;
+  users: Array<{ name: string; auth: string }>;
+  contexts: Array<{ name: string; cluster: string; user: string; current: boolean }>;
 }
 
 /** Result of a successful kubeconfig import. */

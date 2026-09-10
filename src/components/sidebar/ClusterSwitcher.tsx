@@ -11,7 +11,7 @@ import { useClickOutside } from '../../hooks/useClickOutside';
 import { useTranslation } from '../../hooks/useI18n';
 import { connectTo } from '../../lib/connect';
 import { cx } from '../../lib/cx';
-import { importKubeconfigViaInput, KubeconfigImportError } from '../../providers';
+import { getProvider, importKubeconfigViaInput, KubeconfigImportError } from '../../providers';
 import { getErrorReporter, getSuccessReporter } from '../../providers/errorHandler';
 import type { ImportResult } from '../../providers/types';
 import { useConnection } from '../../hooks/useStoreHooks';
@@ -90,6 +90,30 @@ export function ClusterSwitcher() {
     });
   };
 
+  /** Remove a web-imported context (the "×" on imported rows). Only imported
+   *  contexts are removable — kubeconfig-file contexts belong to the
+   *  operator's file. Removing the live context tears the connection down
+   *  server-side, so the store goes back to idle. */
+  const onRemoveContext = async (name: string) => {
+    const provider = getProvider();
+    if (typeof provider.removeImportedContext !== 'function') return;
+    try {
+      const remaining = await provider.removeImportedContext(name);
+      setContexts(remaining);
+      if (connection.context === name) {
+        useStore.setState({
+          connection: { phase: 'idle', context: null, clusterName: null },
+        });
+      }
+      getSuccessReporter()(name, t('chrome.clusterSwitcher.removed', '已移除该集群上下文'));
+    } catch (e) {
+      getErrorReporter()(
+        t('chrome.clusterSwitcher.removeFailed', '移除失败'),
+        e instanceof Error ? e.message : String(e)
+      );
+    }
+  };
+
   // Display name: the connected cluster, else the selected context, else a stub.
   const name =
     connection.clusterName ?? connection.context ?? t('chrome.clusterSwitcher.noCluster');
@@ -156,9 +180,8 @@ export function ClusterSwitcher() {
         <div className={styles.menu}>
           {contexts.map((ctx) => {
             const isCurrent = ctx.name === connection.context;
-            return (
+            const row = (
               <button
-                key={ctx.name}
                 type="button"
                 className={cx(styles.menuRow, isCurrent && styles.menuRowActive)}
                 onClick={() => {
@@ -174,6 +197,28 @@ export function ClusterSwitcher() {
                 <span className={styles.menuName}>{ctx.name}</span>
                 <span className={styles.menuEnv}>{ctx.cluster}</span>
               </button>
+            );
+            // Imported contexts (web paste/import) carry a remove affordance —
+            // they live only in the manager, so removing them is safe. The row
+            // becomes a flex wrapper: the select button plus a small "×".
+            if (!ctx.imported) return <div key={ctx.name}>{row}</div>;
+            return (
+              <div key={ctx.name} className={styles.menuRowWrap}>
+                {row}
+                <button
+                  type="button"
+                  className={styles.menuRemove}
+                  aria-label={t('chrome.clusterSwitcher.removeContext', ctx.name)}
+                  title={t('chrome.clusterSwitcher.removeContext', ctx.name)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    closeMenus();
+                    void onRemoveContext(ctx.name);
+                  }}
+                >
+                  ×
+                </button>
+              </div>
             );
           })}
           {contexts.length === 0 && (

@@ -81,6 +81,8 @@ import type {
   ShellHandle,
   Silence,
   Unsub,
+  ContextInfo,
+  KubeconfigPreview,
 } from './types';
 
 /** All not-bridged methods share this rejection so the UI shows the same message. */
@@ -216,6 +218,23 @@ export class HttpProvider extends BaseRpcProvider implements DataProvider {
     // The web shell doesn't persist prefs across reloads by default; a
     // future "import kubeconfig via URL" flow would land here.
     return Promise.resolve([]);
+  }
+
+  async validateKubeconfigContent(contents: string, filename: string): Promise<KubeconfigPreview> {
+    // Always resolves — `valid: false` plus the `issues` list IS the
+    // preview result (the wizard renders problems, it doesn't catch them).
+    return httpInvoke<KubeconfigPreview>('validate_kubeconfig_content', { filename, contents });
+  }
+
+  async importKubeconfigContent(contents: string, filename: string): Promise<ImportResult> {
+    return httpInvoke<ImportResult>('import_kubeconfig_content', { filename, contents });
+  }
+
+  async removeImportedContext(context: string): Promise<ContextInfo[]> {
+    const result = await httpInvoke<{ contexts: ContextInfo[] }>('remove_imported_context', {
+      context,
+    });
+    return result.contexts;
   }
 
   // getYaml, applyYaml, dryRunYaml, getProperties, deleteResource,

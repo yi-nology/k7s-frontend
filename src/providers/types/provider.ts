@@ -11,6 +11,7 @@ import type {
   ClusterStatus,
   ContextInfo,
   ImportResult,
+  KubeconfigPreview,
   Prefs,
   ResourceRef,
 } from './cluster';
@@ -100,6 +101,24 @@ export interface DataProvider {
    * merged list and the imported path, or null if the user cancelled.
    */
   importKubeconfig(): Promise<ImportResult | null>;
+  /**
+   * Parse + validate kubeconfig YAML WITHOUT importing it — the web paste
+   * mode's preview. Always resolves; check `valid`/`issues` on the result.
+   * Web-only (HttpProvider): the desktop shell has real files on disk and
+   * goes through {@link importKubeconfig}.
+   */
+  validateKubeconfigContent?(contents: string, filename: string): Promise<KubeconfigPreview>;
+  /**
+   * Import pasted kubeconfig YAML directly (same backend path as
+   * {@link importKubeconfig}, minus the file picker). Web-only.
+   */
+  importKubeconfigContent?(contents: string, filename: string): Promise<ImportResult>;
+  /**
+   * Remove a web-imported context (the switcher's remove action); returns the
+   * refreshed switcher list. Rejects for contexts that came from the
+   * operator's kubeconfig file. Web-only.
+   */
+  removeImportedContext?(context: string): Promise<ContextInfo[]>;
   /**
    * Re-register previously imported kubeconfig files on boot (B17). Returns the
    * paths that still parse — callers should persist that, dropping the rest.

@@ -18,7 +18,8 @@ import { useEffect, useState } from 'react';
 import { useStore } from '../../store';
 import { useTranslation } from '../../hooks/useI18n';
 import { getProvider, KubeconfigImportError } from '../../providers';
-import type { KubeconfigIssue } from '../../providers/types';
+import type { DataProvider } from '../../providers/types';
+import type { KubeconfigIssue, KubeconfigPreview } from '../../providers/types';
 import { markOnboarded } from '../../lib/onboarded';
 import styles from './OnboardingWizard.module.css';
 
@@ -33,6 +34,13 @@ export function OnboardingWizard() {
   // import — both rendered inline so the user sees exactly what's wrong.
   const [importError, setImportError] = useState<Error | null>(null);
   const [warnings, setWarnings] = useState<KubeconfigIssue[]>([]);
+  // Paste mode (web shell): raw YAML in, server-side parse+validate preview
+  // out. `preview` renders the parsed clusters/users/contexts and issues;
+  // the import button stays disabled until `preview.valid`.
+  const [pasteOpen, setPasteOpen] = useState(false);
+  const [pasteText, setPasteText] = useState('');
+  const [preview, setPreview] = useState<KubeconfigPreview | null>(null);
+  const [previewBusy, setPreviewBusy] = useState(false);
   const { t } = useTranslation();
 
   /** Close + mark done. Every dismissal path funnels through here so the
@@ -91,6 +99,53 @@ export function OnboardingWizard() {
     }
   };
 
+  /** Parse the pasted YAML (preview only — nothing is registered yet). The
+   *  capability check keeps the Tauri shell, where these provider methods
+   *  don't exist, from ever showing the paste UI dead-end. */
+  const parsePasted = async () => {
+    setPreview(null);
+    setImportError(null);
+    setWarnings([]);
+    const provider = getProvider() as DataProvider;
+    if (typeof provider.validateKubeconfigContent !== 'function') {
+      setImportError(
+        new Error(t('onboarding.import.pasteUnsupported', 'Paste mode is only available in the browser shell.'))
+      );
+      return;
+    }
+    setPreviewBusy(true);
+    try {
+      setPreview(await provider.validateKubeconfigContent(pasteText, 'pasted.yaml'));
+    } catch (e) {
+      console.error('[onboarding] preview failed:', e);
+      setImportError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      setPreviewBusy(false);
+    }
+  };
+
+  /** Import the validated pasted YAML (second server round-trip). */
+  const importPasted = async () => {
+    if (!preview?.valid) return;
+    const provider = getProvider() as DataProvider;
+    if (typeof provider.importKubeconfigContent !== 'function') return;
+    setPreviewBusy(true);
+    try {
+      const result = await provider.importKubeconfigContent(pasteText, 'pasted.yaml');
+      // Same integration as `pick`: merge into the switcher, remember the
+      // label, surface advisory warnings, advance.
+      useStore.getState().setContexts(result.contexts);
+      useStore.getState().addImportedFile(result.path);
+      setWarnings(result.issues ?? []);
+      setStep(1);
+    } catch (e) {
+      console.error('[onboarding] import failed:', e);
+      setImportError(e instanceof Error ? e : new Error(String(e)));
+    } finally {
+      setPreviewBusy(false);
+    }
+  };
+
   return (
     // Click the scrim (not the dialog) → close. Same contract as the settings
     // modal: Esc or outside, both marking onboarding done.
@@ -118,6 +173,103 @@ export function OnboardingWizard() {
             <button type="button" className={styles.primary} onClick={() => void pick()}>
               {t('onboarding.import.pick', 'Choose file…')}
             </button>
+            {typeof getProvider().validateKubeconfigContent === 'function' && (
+              <div>
+                <button
+                  type="button"
+                  className={styles.secondary}
+                  onClick={() => {
+                    setPasteOpen((v) => !v);
+                    setPreview(null);
+                    setImportError(null);
+                  }}
+                >
+                  {pasteOpen
+                    ? t('onboarding.import.pasteHide', '收起粘贴框')
+                    : t('onboarding.import.paste', '或直接粘贴 YAML')}
+                </button>
+                {pasteOpen && (
+                  <>
+                    <textarea
+                      className={styles.pasteArea}
+                      rows={10}
+                      spellCheck={false}
+                      value={pasteText}
+                      placeholder={t(
+                        'onboarding.import.pastePlaceholder',
+                        'apiVersion: v1\nclusters:\n- cluster:\n    server: …'
+                      )}
+                      onChange={(e) => {
+                        setPasteText(e.target.value);
+                        setPreview(null);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      className={styles.primary}
+                      disabled={!pasteText.trim() || previewBusy}
+                      onClick={() => void parsePasted()}
+                    >
+                      {previewBusy
+                        ? t('onboarding.import.parsing', '解析中…')
+                        : t('onboarding.import.parse', '解析预览')}
+                    </button>
+                  </>
+                )}
+              </div>
+            )}
+            {preview && (
+              <div className={styles.previewBox}>
+                {preview.issues.length > 0 && (
+                  <ul className={styles.issueList}>
+                    {preview.issues.map((iss, i) => (
+                      <li
+                        key={i}
+                        className={iss.severity === 'error' ? styles.issueError : styles.issueWarning}
+                      >
+                        {iss.context ? <b>{iss.context}: </b> : null}
+                        {iss.message}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {preview.valid ? (
+                  <>
+                    <p className={styles.previewOk}>{t('onboarding.import.previewOk', '校验通过，可导入')}</p>
+                    <div className={styles.previewGrid}>
+                      <span className={styles.previewLabel}>
+                        {t('onboarding.import.clusters', '集群')}
+                      </span>
+                      <pre className={styles.previewValues}>
+                        {preview.clusters.map((c) => `${c.name} → ${c.server}`).join('\n') || '—'}
+                      </pre>
+                      <span className={styles.previewLabel}>{t('onboarding.import.users', '用户')}</span>
+                      <pre className={styles.previewValues}>
+                        {preview.users.map((u) => `${u.name}（${u.auth}）`).join('\n') || '—'}
+                      </pre>
+                      <span className={styles.previewLabel}>{t('onboarding.import.contexts', '上下文')}</span>
+                      <pre className={styles.previewValues}>
+                        {preview.contexts.map((c) => `${c.name}${c.current ? ' ★' : ''}`).join('\n') || '—'}
+                      </pre>
+                    </div>
+                    <button
+                      type="button"
+                      className={styles.primary}
+                      disabled={previewBusy}
+                      onClick={() => void importPasted()}
+                    >
+                      {previewBusy
+                        ? t('onboarding.import.parsing', '导入中…')
+                        : t('onboarding.import.importPasted', '导入')}
+                    </button>
+                  </>
+                ) : (
+                  <p className={styles.previewBad}>
+                    {t('onboarding.import.previewBad', '校验未通过：请修正上面的错误后重新解析')}
+                  </p>
+                )}
+              </div>
+            )}
             {importError && (
               <div className={styles.importError} role="alert">
                 <p className={styles.issueTitle}>

@@ -124,6 +124,9 @@ export interface Dictionary {
       noCluster: string;
       errorDetails: string;
       retry: string;
+      removed: (name: string) => string;
+      removeFailed: string;
+      removeContext: (name: string) => string;
     };
     /** The floating AI assistant toggle button (bottom-right of the content area). */
     aiFab: {
@@ -260,6 +263,19 @@ export interface Dictionary {
       parseFailed: string;
       validationFailed: string;
       importedWithWarnings: string;
+      /** Web paste mode: raw YAML textarea + server-side parse/validate. */
+      paste: string;
+      pasteHide: string;
+      pasteUnsupported: string;
+      pastePlaceholder: string;
+      parsing: string;
+      parse: string;
+      previewOk: string;
+      previewBad: string;
+      clusters: string;
+      users: string;
+      contexts: string;
+      importPasted: string;
     };
     conn: {
       /** "Connected: {cluster}" — the component `.replace()`s the placeholder. */
