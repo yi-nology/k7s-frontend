@@ -319,8 +319,9 @@
 /* ============== 5-section rail (P1 IA) ============== */
 
 /* The section rail replaces the old scrollable kind list. Five buttons, one
-   per section in SECTION_ORDER — the kind-level navigation moved into each
-   section page's SubNav. */
+   per section in SECTION_ORDER. Each resource section (workloads / config /
+   storage) gets an inline kind submenu that opens below the active button —
+   the kind-level navigation no longer lives in a separate SubNav component. */
 .rail {
   display: flex;
   flex-direction: column;
@@ -353,7 +354,52 @@
   font-weight: 600;
 }
 .railLabel {
+  flex: 1;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.railChevron {
+  flex: none;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.railGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.submenu {
+  list-style: none;
+  margin: 0;
+  padding: 2px 0 4px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+.submenuItem {
+  display: block;
+  width: 100%;
+  padding: 5px 10px 5px 32px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--text-nav-inactive);
+  font-size: var(--text-sm, var(--text-md));
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.submenuItem:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+.submenuItemActive {
+  background: var(--bg-nav-active);
+  color: var(--text-primary);
+  font-weight: 600;
 }
 
 /* Imported-context rows carry a remove affordance: select button plus a
