@@ -20,7 +20,6 @@ import { ErrorToast } from './components/common/ErrorToast';
 import { setErrorReporter, setSuccessReporter } from './providers/errorHandler';
 import { humanizeError } from './lib/errorsHuman';
 import { Sidebar } from './components/sidebar/Sidebar';
-import { SubNav } from './components/subnav/SubNav';
 import { TopBar } from './components/topbar/TopBar';
 import { StatusBar } from './components/statusbar/StatusBar';
 import { ResourceTable } from './components/table/ResourceTable';
@@ -180,7 +179,10 @@ export default function App() {
             <div className={styles.content}>
               {/* Section-based content routing (P1 IA): overview hosts the
                   Dashboard inline, tools hosts the ops-tool catalog, and the
-                  three resource sections get the SubNav + table + detail panel.
+                  three resource sections get the table + detail panel. The
+                  kind submenu (SubNav's old job) lives in Sidebar now — click
+                  "工作负载" and the kind list appears next to the section
+                  button, replacing the old top tab strip.
                   Keep the section content mounted when an overlay opens — scroll
                   position, sort state, and selections survive the round-trip. */}
               <div
@@ -197,13 +199,15 @@ export default function App() {
                       <ToolsPage />
                     </Suspense>
                   ) : (
-                    <>
-                      <SubNav section={section} />
-                      <div className={styles.tableRow}>
-                        <ResourceTable />
-                        <DetailPanel />
-                      </div>
-                    </>
+                    // The kind submenu moved into Sidebar (each section's
+                    // kinds now render as children of the active section
+                    // button), so the resource content area has no top tab
+                    // strip — Sidebar is the single source of truth for both
+                    // section and kind navigation.
+                    <div className={styles.tableRow}>
+                      <ResourceTable />
+                      <DetailPanel />
+                    </div>
                   )}
                 </div>
                 {aiOpen && AI_ENABLED && (
