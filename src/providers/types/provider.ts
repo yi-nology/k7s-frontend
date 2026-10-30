@@ -97,6 +97,12 @@ export interface DataProvider {
   listContexts(): Promise<ContextInfo[]>;
   connect(context: string): Promise<ClusterInfo>;
   /**
+   * Remember the backend connection the UI is bound to (web shell only; the
+   * desktop is single-user). Fed from the token-guarded connect result so the
+   * epoch writes echo matches the store. See `BaseRpcProvider.connectionEpoch`.
+   */
+  setConnectionEpoch?(epoch: number | null): void;
+  /**
    * Import contexts from a kubeconfig file (via a native file picker). Returns the
    * merged list and the imported path, or null if the user cancelled.
    */

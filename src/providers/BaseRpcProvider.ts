@@ -75,6 +75,18 @@ export abstract class BaseRpcProvider {
    */
   protected abstract rpc<T>(cmd: string, args?: Record<string, unknown>): Promise<T>;
 
+  /**
+   * Epoch of the connection this UI is bound to (null until a connect; never
+   * set by the desktop shell). Mutations echo it so a write from a page bound
+   * to an earlier connection is rejected.
+   */
+  protected connectionEpoch: number | null = null;
+
+  /** `{ connectionEpoch }` when known, `{}` otherwise (desktop IPC). */
+  protected epochArg(): { connectionEpoch?: number } {
+    return this.connectionEpoch == null ? {} : { connectionEpoch: this.connectionEpoch };
+  }
+
   listContexts(): Promise<ContextInfo[]> {
     return this.rpc<ContextInfo[]>('list_contexts');
   }
@@ -433,6 +445,7 @@ export abstract class BaseRpcProvider {
       namespace: ref.namespace ?? '',
       name: ref.name,
       yaml: text,
+      ...this.epochArg(),
     });
   }
   dryRunYaml(ref: ResourceRef, text: string): Promise<YamlDiff> {
@@ -441,6 +454,7 @@ export abstract class BaseRpcProvider {
       namespace: ref.namespace ?? '',
       name: ref.name,
       yaml: text,
+      ...this.epochArg(),
     });
   }
   getProperties(ref: ResourceRef): Promise<Properties> {
@@ -455,6 +469,7 @@ export abstract class BaseRpcProvider {
       kind: ref.kind,
       namespace: ref.namespace ?? '',
       name: ref.name,
+      ...this.epochArg(),
     });
   }
   scaleResource(ref: ResourceRef, replicas: number): Promise<void> {
@@ -463,6 +478,7 @@ export abstract class BaseRpcProvider {
       namespace: ref.namespace ?? '',
       name: ref.name,
       replicas,
+      ...this.epochArg(),
     });
   }
   restartPod(ref: ResourceRef): Promise<void> {

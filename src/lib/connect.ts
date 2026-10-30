@@ -40,10 +40,17 @@ export async function connectTo(
     // that re-emits on connect) for as long as it takes the older in-flight
     // call to resolve.
     if (myToken !== currentToken) return;
+    // Web shell: the provider echoes this epoch on mutations so the backend
+    // rejects edits made from a page bound to an earlier connection. Fed from
+    // this same token-guarded result so store and provider cannot disagree.
+    provider.setConnectionEpoch?.(info.connectionEpoch ?? null);
     store.setConnection({
       phase: 'connected',
       context: info.context,
       clusterName: info.clusterName,
+      // Web shell: the reconciliation compares `cluster-status` epochs with
+      // this one to spot a backend that switched clusters underneath us.
+      epoch: info.connectionEpoch ?? null,
       error: undefined,
     });
   } catch (e) {

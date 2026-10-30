@@ -91,6 +91,12 @@ export interface ConnectionState {
   clusterName: string | null;
   /** Error message when phase === "error". */
   error?: string;
+  /**
+   * Epoch of the connection that filled this view (from `connect`). A newer
+   * `cluster-status` epoch means the shared web backend moved to another
+   * cluster and this view is stale. Web shell only.
+   */
+  epoch?: number | null;
 }
 
 /**

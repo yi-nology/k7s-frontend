@@ -15,7 +15,7 @@ import { reconcileClusterStatus, type ClusterStatusState } from './clusterStatus
 import type { ClusterStatus } from '../providers/types';
 import type { ConnectionState } from '../store';
 
-/** A baseline connected status for cluster A. */
+/** A baseline connected status for cluster A (connection epoch 6). */
 const STATUS_A_OK: ClusterStatus = {
   connected: true,
   version: 'v1.31',
@@ -25,6 +25,7 @@ const STATUS_A_OK: ClusterStatus = {
   cpuPercent: 41,
   memPercent: 63,
   context: 'A',
+  epoch: 6,
 };
 
 const STATUS_A_DOWN: ClusterStatus = { ...STATUS_A_OK, connected: false, context: 'A' };
@@ -35,6 +36,7 @@ function newState(initial: ConnectionState): ClusterStatusState & {
   connectionWrites: Partial<ConnectionState>[];
   podMetricsWrites: unknown[];
   nodeMetricsWrites: unknown[];
+  resetDataCalls: number;
 } {
   const state: ClusterStatusState = {
     connection: initial,
@@ -51,12 +53,16 @@ function newState(initial: ConnectionState): ClusterStatusState & {
     setNodeMetrics: (m) => {
       (state as ReturnType<typeof newState>).nodeMetricsWrites.push(m);
     },
+    resetData: () => {
+      (state as ReturnType<typeof newState>).resetDataCalls += 1;
+    },
   };
   return Object.assign(state, {
     statusWrites: [] as ClusterStatus[],
     connectionWrites: [] as Partial<ConnectionState>[],
     podMetricsWrites: [] as unknown[],
     nodeMetricsWrites: [] as unknown[],
+    resetDataCalls: 0,
   });
 }
 
@@ -108,10 +114,11 @@ describe('reconcileClusterStatus — context match (pass-29 happy path)', () => 
 
 describe('reconcileClusterStatus — context mismatch (pass-29, the regression)', () => {
   it('drops a stale `connected: false` from a previous cluster (A → B switch)', () => {
-    // The user is on cluster B, phase connected. A late `cluster-status` from
-    // A saying "I'm down" lands in B's subscription stream. The old code
-    // would have flipped B to error and cleared B's metrics.
-    const s = newState({ phase: 'connected', context: 'B', clusterName: 'B' });
+    // The user is on cluster B (epoch 7), phase connected. A late
+    // `cluster-status` from A (epoch 6) saying "I'm down" lands in B's
+    // subscription stream. The old code would have flipped B to error and
+    // cleared B's metrics.
+    const s = newState({ phase: 'connected', context: 'B', clusterName: 'B', epoch: 7 });
     reconcileClusterStatus(STATUS_A_DOWN, s);
     expect(s.connection.phase).toBe('connected');
     expect(s.connection.error).toBeUndefined();
@@ -119,25 +126,72 @@ describe('reconcileClusterStatus — context mismatch (pass-29, the regression)'
     expect(s.connectionWrites).toEqual([]);
     expect(s.podMetricsWrites).toEqual([]);
     expect(s.nodeMetricsWrites).toEqual([]);
+    expect(s.resetDataCalls).toBe(0);
   });
 
   it('drops a stale `connected: true` from a previous cluster (B is currently error)', () => {
     // The user is on cluster B in an error state. A late `connected: true`
     // from A would otherwise flip B's phase to connected — equally wrong,
     // because B is actually down.
-    const s = newState({ phase: 'error', context: 'B', clusterName: 'B', error: 'B-down' });
+    const s = newState({
+      phase: 'error',
+      context: 'B',
+      clusterName: 'B',
+      epoch: 7,
+      error: 'B-down',
+    });
     reconcileClusterStatus(STATUS_A_OK, s);
     expect(s.connection.phase).toBe('error');
     expect(s.connection.error).toBe('B-down');
     expect(s.statusWrites).toEqual([]);
+    expect(s.resetDataCalls).toBe(0);
   });
 
   it('also drops the metrics-clear branch for a stale status', () => {
-    const s = newState({ phase: 'connected', context: 'B', clusterName: 'B' });
+    const s = newState({ phase: 'connected', context: 'B', clusterName: 'B', epoch: 7 });
     const noMetrics: ClusterStatus = { ...STATUS_A_OK, cpuPercent: null };
     reconcileClusterStatus(noMetrics, s);
     expect(s.podMetricsWrites).toEqual([]);
     expect(s.nodeMetricsWrites).toEqual([]);
+  });
+});
+
+describe('reconcileClusterStatus — backend switched clusters (newer epoch)', () => {
+  it('flags an error and clears the stale view when the epoch is newer than ours', () => {
+    // This tab is showing B (epoch 7); the shared web backend is now connected
+    // to A (epoch 8) because another session called `connect`. Every write
+    // from this page would land on A, which is exactly the cross-environment
+    // image swap this guard exists for.
+    const s = newState({ phase: 'connected', context: 'B', clusterName: 'B', epoch: 7 });
+    const foreign: ClusterStatus = { ...STATUS_A_OK, context: 'A', epoch: 8 };
+    reconcileClusterStatus(foreign, s);
+    expect(s.connection.phase).toBe('error');
+    expect(s.connection.error).toContain('A');
+    expect(s.connectionWrites).toHaveLength(1);
+    // The status belongs to the other connection: never apply it here.
+    expect(s.statusWrites).toEqual([]);
+    expect(s.resetDataCalls).toBe(1);
+  });
+
+  it('does not wipe the view while a switch of our own is in flight', () => {
+    // connectTo(B) has set context/phase but not the new epoch yet. A status
+    // from the foreign cluster is stale baggage, not a backend switch — the
+    // guard only fires on an established connection.
+    const s = newState({ phase: 'connecting', context: 'B', clusterName: null, epoch: 6 });
+    const foreign: ClusterStatus = { ...STATUS_A_OK, context: 'A', epoch: 8 };
+    reconcileClusterStatus(foreign, s);
+    expect(s.connection.phase).toBe('connecting');
+    expect(s.connectionWrites).toEqual([]);
+    expect(s.resetDataCalls).toBe(0);
+  });
+
+  it('keeps dropping foreign statuses without an epoch (legacy backend)', () => {
+    const s = newState({ phase: 'connected', context: 'B', clusterName: 'B', epoch: 7 });
+    const legacy: ClusterStatus = { ...STATUS_A_OK };
+    delete (legacy as { epoch?: number }).epoch;
+    reconcileClusterStatus(legacy, s);
+    expect(s.connection.phase).toBe('connected');
+    expect(s.resetDataCalls).toBe(0);
   });
 });
 

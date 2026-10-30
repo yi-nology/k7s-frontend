@@ -20,11 +20,17 @@ export interface ClusterStatus {
   /**
    * Kubeconfig context this status belongs to. Optional for backward
    * compatibility with backends that pre-date the context-tagging wire change;
-   * when present, `useBootstrap`'s reconciliation drops statuses whose context
-   * doesn't match the store's current context (so a stale event from the
-   * previous cluster can't flip the new cluster's connection phase).
+   * when present, the reconciliation compares it with the store's current
+   * context (so a stale event from the previous cluster can't flip the new
+   * cluster's connection phase).
    */
   context?: string;
+  /**
+   * Epoch of the connection that produced this status: older than ours is a
+   * late event from the previous cluster (dropped); newer means the shared
+   * web backend switched clusters (surfaced as an error).
+   */
+  epoch?: number;
 }
 
 /** A kubeconfig context entry for the cluster switcher. */
@@ -79,6 +85,11 @@ export interface ClusterInfo {
   clusterName: string;
   server: string;
   version: string;
+  /**
+   * Epoch of the just-established connection; mutations echo it so a write
+   * from a page bound to an earlier connection is rejected. Absent on desktop.
+   */
+  connectionEpoch?: number;
 }
 
 /** Persisted UI preferences (B11) — where the user left off. */

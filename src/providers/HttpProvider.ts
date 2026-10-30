@@ -201,6 +201,15 @@ export class HttpProvider extends BaseRpcProvider implements DataProvider {
     return httpInvoke<T>(cmd, args);
   }
 
+  /**
+   * Remember the backend connection this tab is bound to. Mutations echo the
+   * epoch (see `ensure_connection_epoch`); fed by `lib/connect.ts` from the
+   * same result the store commits, so the two cannot diverge on a connect race.
+   */
+  setConnectionEpoch(epoch: number | null): void {
+    this.connectionEpoch = epoch;
+  }
+
   // ---- one-shot commands (transport-specific: file dialog) ----
 
   importKubeconfig(_input?: HTMLInputElement): Promise<ImportResult | null> {

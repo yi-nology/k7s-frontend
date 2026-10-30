@@ -36,6 +36,7 @@ export interface ClusterStatusState {
   setClusterStatus: AppState['setClusterStatus'];
   setPodMetrics: AppState['setPodMetrics'];
   setNodeMetrics: AppState['setNodeMetrics'];
+  resetData: AppState['resetData'];
 }
 
 /**
@@ -43,18 +44,42 @@ export interface ClusterStatusState {
  * the status, flipping the connection phase on a connectivity change, and
  * clearing the cached pod/node metrics on a metrics-server disappearance — are
  * all gated on the status belonging to the store's current context.
+ *
+ * A status tagged with a *foreign* context is not always stale: k7s-web runs
+ * one backend connection per process, so another session's `connect` re-points
+ * this tab's writes too. The epoch tells them apart — older than ours is late
+ * baggage from the cluster this tab just left; newer is the backend having
+ * moved on.
  */
 export function reconcileClusterStatus(status: ClusterStatus, state: ClusterStatusState): void {
-  const { connection, setConnection, setClusterStatus, setPodMetrics, setNodeMetrics } = state;
+  const { connection, setConnection, setClusterStatus, setPodMetrics, setNodeMetrics, resetData } =
+    state;
 
-  // Drop stale events from a previous cluster. The gate is a no-op when either
-  // side is unknown (legacy untagged status, or the store is in the pre-first-
-  // connect idle/connecting state), so the existing flows are preserved.
+  // Foreign context. The gate is a no-op when either side is unknown (legacy
+  // untagged status, or the store is in the pre-first-connect idle/connecting
+  // state), so those flows are preserved.
   if (
     typeof status.context === 'string' &&
     connection.context != null &&
     status.context !== connection.context
   ) {
+    // Newer epoch: the backend switched to this context after we connected
+    // (another web session). Every write from this tab would now land on the
+    // wrong cluster — say so and drop the stale view.
+    if (
+      connection.phase === 'connected' &&
+      typeof status.epoch === 'number' &&
+      typeof connection.epoch === 'number' &&
+      status.epoch > connection.epoch
+    ) {
+      setConnection({
+        phase: 'error',
+        error: `集群连接已切换到 ${status.context}，请重新选择集群`,
+      });
+      resetData();
+    }
+    // Otherwise it is late baggage from the cluster this tab just left (older
+    // epoch) or a backend that predates the field: keep dropping it.
     return;
   }
 
